@@ -75,11 +75,19 @@
   .lab { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: block; font-weight: 600; }
 
   input, select {
-    width: 100%; padding: 13px 14px; font-size: 16px;
+    width: 100%; min-width: 0; max-width: 100%; padding: 13px 14px; font-size: 16px;
     background: var(--panel-2); color: var(--text);
     border: 1px solid var(--border); border-radius: 11px; outline: none;
   }
   input:focus, select:focus { border-color: var(--accent); }
+  /* Native date/number inputs ignore width on iOS/Safari without this */
+  input[type="date"], input[type="number"] { -webkit-appearance: none; appearance: none; }
+  input[type="date"] { display: block; }
+  select {
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2393a0bd' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 34px;
+  }
 
   /* Segmented controls */
   .seg { display: flex; gap: 8px; }
@@ -197,7 +205,8 @@
         </label>
         <label class="field">
           <span class="lab">Expiry</span>
-          <input id="expiry" type="date" />
+          <select id="expirySel"></select>
+          <input id="expiry" type="date" style="display:none;margin-top:8px" />
         </label>
       </div>
       <div class="row2">
@@ -234,11 +243,11 @@
   <!-- SETTINGS VIEW -->
   <section class="view" id="view-settings">
     <div class="card">
-      <h2>WhatsApp delivery</h2>
+      <h2>Delivery</h2>
       <label class="field">
-        <span class="lab">Direct-send contact number (optional)</span>
+        <span class="lab">Recipient phone number (for direct send)</span>
         <input id="waNumber" type="tel" inputmode="tel" placeholder="e.g. 14155551234 (country code, no +)" />
-        <div class="hint">WhatsApp has no public link to post into a <b>group</b>. Leave this blank to use the recommended flow: the message is copied and WhatsApp opens so you paste it into your group. Set a number to instead open a direct chat with one contact.</div>
+        <div class="hint">Used by <b>Direct WhatsApp</b> and <b>SMS</b> to open a 1-to-1 chat with this person, message pre-filled — you tap send. Leave blank to use <b>Group</b> send (copies the message and opens WhatsApp so you paste into a group). WhatsApp has no public link that posts into a group automatically.</div>
       </label>
       <label class="field">
         <span class="lab">Signal header text</span>
@@ -258,7 +267,8 @@
 <div class="sendbar" id="sendbar">
   <div class="inner">
     <button class="btn ghost" id="copyBtn" title="Copy message">⧉</button>
-    <button class="btn send" id="sendBtn">📤 Copy &amp; Send to WhatsApp</button>
+    <button class="btn ghost" id="smsBtn" title="Send via SMS">💬&nbsp;SMS</button>
+    <button class="btn send" id="sendBtn">📤&nbsp;WhatsApp</button>
   </div>
 </div>
 
@@ -321,9 +331,73 @@
   });
 
   /* ---------- Field inputs ---------- */
-  ["strike", "expiry", "entry", "target", "note"].forEach(function (id) {
+  ["strike", "entry", "target", "note"].forEach(function (id) {
     $(id).addEventListener("input", updatePreview);
   });
+  $("expiry").addEventListener("input", updatePreview);
+
+  /* ---------- Expiry: generated daily / weekly / monthly ---------- */
+  // Tickers with same-week (near-daily) expirations listed.
+  var DAILY_TICKERS = { SPY: 1, QQQ: 1, IWM: 1, SPX: 1, XSP: 1, NDX: 1, DIA: 1 };
+  var expirySel = $("expirySel");
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function isoOf(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function is3rdFri(d) { return d.getDay() === 5 && d.getDate() >= 15 && d.getDate() <= 21; }
+  function labelD(d) { return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
+
+  function buildExpiryOptions() {
+    var sym = (state.selectedSym || "").toUpperCase();
+    var prev = expirySel.value;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var html = "";
+
+    if (DAILY_TICKERS[sym]) {
+      var days = [], d = new Date(today), guard = 0;
+      while (days.length < 6 && guard < 14) {
+        var wd = d.getDay();
+        if (wd >= 1 && wd <= 5) days.push(new Date(d));
+        d.setDate(d.getDate() + 1); guard++;
+      }
+      html += '<optgroup label="Daily (0DTE)">' + days.map(function (x) {
+        return '<option value="' + isoOf(x) + '">' + labelD(x) + '</option>';
+      }).join("") + '</optgroup>';
+    }
+
+    var fri = new Date(today);
+    while (fri.getDay() !== 5) fri.setDate(fri.getDate() + 1);
+    var end = new Date(today); end.setMonth(end.getMonth() + 4);
+    var weekly = [], monthly = [];
+    while (fri <= end) {
+      (is3rdFri(fri) ? monthly : weekly).push(new Date(fri));
+      fri.setDate(fri.getDate() + 7);
+    }
+    html += '<optgroup label="Weekly (Fri)">' + weekly.map(function (x) {
+      return '<option value="' + isoOf(x) + '">' + labelD(x) + '</option>';
+    }).join("") + '</optgroup>';
+    html += '<optgroup label="Monthly (3rd Fri)">' + monthly.map(function (x) {
+      return '<option value="' + isoOf(x) + '">' + labelD(x) + '</option>';
+    }).join("") + '</optgroup>';
+    html += '<option value="custom">Custom date…</option>';
+
+    expirySel.innerHTML = html;
+    // Preserve prior selection if still present, else default to first entry.
+    var opts = Array.prototype.map.call(expirySel.options, function (o) { return o.value; });
+    if (prev && opts.indexOf(prev) >= 0) expirySel.value = prev;
+    else expirySel.selectedIndex = 0;
+    onExpiryChange();
+  }
+
+  function onExpiryChange() {
+    var custom = expirySel.value === "custom";
+    $("expiry").style.display = custom ? "block" : "none";
+    updatePreview();
+  }
+  expirySel.addEventListener("change", onExpiryChange);
+
+  function getExpiry() {
+    if (!expirySel) return "";
+    return expirySel.value === "custom" ? $("expiry").value : expirySel.value;
+  }
 
   /* ---------- Ticker autocomplete ---------- */
   var tickInput = $("ticker"), acList = $("acList"), hiIndex = -1, curMatches = [];
@@ -386,13 +460,14 @@
     tickInput.value = t.s;
     state.selectedSym = t.s;
     acList.classList.remove("show");
+    buildExpiryOptions();
     updatePreview();
   }
 
   tickInput.addEventListener("input", function () {
     tickInput.value = tickInput.value.toUpperCase();
     state.selectedSym = tickInput.value.trim();
-    renderAc(); updatePreview();
+    renderAc(); buildExpiryOptions(); updatePreview();
   });
   tickInput.addEventListener("focus", function () { if (tickInput.value) renderAc(); });
   tickInput.addEventListener("blur", function () { setTimeout(function () { acList.classList.remove("show"); }, 150); });
@@ -410,7 +485,7 @@
   function buildMessage() {
     var sym = (state.selectedSym || "").trim().toUpperCase();
     var strike = $("strike").value.trim();
-    var expiry = $("expiry").value;
+    var expiry = getExpiry();
     var entry = $("entry").value.trim();
     var target = $("target").value.trim();
     var note = $("note").value.trim();
@@ -464,15 +539,31 @@
     copyText(buildMessage()); toast("Copied ✔");
   });
 
+  function recipientNum() { return ($("waNumber").value || "").replace(/[^0-9]/g, ""); }
+
   $("sendBtn").addEventListener("click", function () {
     if (!valid()) return;
     var msg = buildMessage();
     copyText(msg);
     saveHistory(msg);
-    var num = ($("waNumber").value || "").replace(/[^0-9]/g, "");
-    var url = "https://wa.me/" + (num ? num : "") + "?text=" + encodeURIComponent(msg);
+    var num = recipientNum();
+    var url = "https://wa.me/" + num + "?text=" + encodeURIComponent(msg);
     toast(num ? "Opening chat…" : "Copied — paste into your group");
     setTimeout(function () { window.open(url, "_blank"); }, 250);
+  });
+
+  $("smsBtn").addEventListener("click", function () {
+    if (!valid()) return;
+    var msg = buildMessage();
+    copyText(msg);
+    saveHistory(msg);
+    var num = recipientNum();
+    if (!num) { toast("Add a recipient number in Settings"); return; }
+    var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+    var sep = isIOS ? "&" : "?";
+    var url = "sms:+" + num + sep + "body=" + encodeURIComponent(msg);
+    toast("Opening Messages…");
+    window.location.href = url;
   });
 
   /* ---------- History ---------- */
@@ -480,7 +571,7 @@
     var h = safeJSON("history", []);
     h.unshift({
       dir: state.dir, sym: (state.selectedSym || "").toUpperCase(),
-      strike: $("strike").value.trim(), expiry: $("expiry").value,
+      strike: $("strike").value.trim(), expiry: getExpiry(),
       entry: $("entry").value.trim(), target: $("target").value.trim(),
       msg: msg, t: Date.now()
     });
@@ -521,9 +612,16 @@
   }
   function reuse(item) {
     tickInput.value = item.sym; state.selectedSym = item.sym;
-    $("strike").value = item.strike || ""; $("expiry").value = item.expiry || "";
+    $("strike").value = item.strike || "";
     $("entry").value = item.entry || ""; $("target").value = item.target || "";
     document.querySelector('#segDir button[data-v="' + item.dir + '"]').click();
+    buildExpiryOptions();
+    if (item.expiry) {
+      var has = Array.prototype.some.call(expirySel.options, function (o) { return o.value === item.expiry; });
+      if (has) { expirySel.value = item.expiry; }
+      else { expirySel.value = "custom"; $("expiry").value = item.expiry; }
+      onExpiryChange();
+    }
     document.querySelector('.tab[data-view="build"]').click();
     toast("Loaded into form");
   }
@@ -556,13 +654,7 @@
   function safeSet(k, v) { try { LS.setItem(k, v); } catch (e) {} }
   function safeJSON(k, def) { try { return JSON.parse(LS.getItem(k)) || def; } catch (e) { return def; } }
 
-  /* default expiry: next Friday */
-  (function () {
-    var d = new Date(); var day = d.getDay();
-    var add = (5 - day + 7) % 7 || 7; d.setDate(d.getDate() + add);
-    $("expiry").value = d.toISOString().slice(0, 10);
-  })();
-
+  buildExpiryOptions();
   updatePreview();
 })();
 </script>

@@ -89,7 +89,6 @@
   }
   .seg button.on[data-v="CALL"] { background: var(--call-bg); border-color: var(--call); color: var(--call); }
   .seg button.on[data-v="PUT"] { background: var(--put-bg); border-color: var(--put); color: var(--put); }
-  .seg.action button.on { background: rgba(59,130,246,.15); border-color: var(--accent); color: var(--accent); }
 
   /* Ticker autocomplete */
   .ac-wrap { position: relative; }
@@ -201,21 +200,19 @@
           <input id="expiry" type="date" />
         </label>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>Position call</h2>
-      <label class="field">
-        <span class="lab">Action</span>
-        <div class="seg action" id="segAct">
-          <button type="button" data-v="AVERAGE">Average</button>
-          <button type="button" data-v="HOLD">Hold</button>
-          <button type="button" data-v="SELL">Sell</button>
-        </div>
-      </label>
-      <label class="field">
+      <div class="row2">
+        <label class="field">
+          <span class="lab">Entry price</span>
+          <input id="entry" type="number" inputmode="decimal" placeholder="e.g. 2.50" step="0.01" min="0" />
+        </label>
+        <label class="field">
+          <span class="lab">Target</span>
+          <input id="target" type="number" inputmode="decimal" placeholder="e.g. 5.00" step="0.01" min="0" />
+        </label>
+      </div>
+      <label class="field" style="margin-bottom:0">
         <span class="lab">Note (optional)</span>
-        <input id="note" type="text" placeholder="Latest thoughts on the position…" maxlength="140" />
+        <input id="note" type="text" placeholder="Latest thoughts on the trade…" maxlength="140" />
       </label>
     </div>
 
@@ -274,7 +271,6 @@
   var LS = window.localStorage;
   var state = {
     dir: "CALL",
-    action: "HOLD",
     tickers: [],
     selectedSym: ""
   };
@@ -316,7 +312,6 @@
     set(def);
   }
   wireSeg($("segDir"), "dir", "CALL");
-  wireSeg($("segAct"), "action", "HOLD");
 
   /* ---------- Settings persistence ---------- */
   ["waNumber", "headerText"].forEach(function (id) {
@@ -326,7 +321,7 @@
   });
 
   /* ---------- Field inputs ---------- */
-  ["strike", "expiry", "note"].forEach(function (id) {
+  ["strike", "expiry", "entry", "target", "note"].forEach(function (id) {
     $(id).addEventListener("input", updatePreview);
   });
 
@@ -416,10 +411,11 @@
     var sym = (state.selectedSym || "").trim().toUpperCase();
     var strike = $("strike").value.trim();
     var expiry = $("expiry").value;
+    var entry = $("entry").value.trim();
+    var target = $("target").value.trim();
     var note = $("note").value.trim();
     var header = ($("headerText").value.trim() || "OPTIONS SIGNAL");
     var arrow = state.dir === "CALL" ? "🟢" : "🔴";
-    var actEmoji = { AVERAGE: "➕", HOLD: "✋", SELL: "💰" }[state.action] || "";
 
     var expTxt = expiry ? formatDate(expiry) : "—";
     var lines = [];
@@ -427,7 +423,8 @@
     lines.push(arrow + " *" + state.dir + "*  |  $" + (sym || "—"));
     lines.push("🎯 Strike: " + (strike ? "$" + strike : "—"));
     lines.push("📅 Expiry: " + expTxt);
-    lines.push("📌 Action: *" + state.action + "* " + actEmoji);
+    lines.push("💵 Entry: " + (entry ? "$" + entry : "—"));
+    lines.push("🚀 Target: " + (target ? "$" + target : "—"));
     if (note) lines.push("📝 " + note);
     lines.push("");
     lines.push("_" + timestamp() + "_");
@@ -482,8 +479,9 @@
   function saveHistory(msg) {
     var h = safeJSON("history", []);
     h.unshift({
-      dir: state.dir, action: state.action, sym: (state.selectedSym || "").toUpperCase(),
+      dir: state.dir, sym: (state.selectedSym || "").toUpperCase(),
       strike: $("strike").value.trim(), expiry: $("expiry").value,
+      entry: $("entry").value.trim(), target: $("target").value.trim(),
       msg: msg, t: Date.now()
     });
     if (h.length > 50) h = h.slice(0, 50);
@@ -524,8 +522,8 @@
   function reuse(item) {
     tickInput.value = item.sym; state.selectedSym = item.sym;
     $("strike").value = item.strike || ""; $("expiry").value = item.expiry || "";
+    $("entry").value = item.entry || ""; $("target").value = item.target || "";
     document.querySelector('#segDir button[data-v="' + item.dir + '"]').click();
-    document.querySelector('#segAct button[data-v="' + item.action + '"]').click();
     document.querySelector('.tab[data-view="build"]').click();
     toast("Loaded into form");
   }

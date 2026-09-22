@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0f1a" />
+<title>Options Signals</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --panel: #141a2b;
+    --panel-2: #1c2438;
+    --border: #263049;
+    --text: #e7ecf5;
+    --muted: #93a0bd;
+    --accent: #3b82f6;
+    --call: #16a34a;
+    --call-bg: rgba(22,163,74,.15);
+    --put: #dc2626;
+    --put-bg: rgba(220,38,38,.15);
+    --wa: #25d366;
+    --radius: 14px;
+    --gap: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f6fb; --panel: #ffffff; --panel-2: #eef2f9;
+      --border: #dbe2ef; --text: #10192b; --muted: #5a6684;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel-2: #eef2f9;
+    --border: #dbe2ef; --text: #10192b; --muted: #5a6684;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.4;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app { max-width: 560px; margin: 0 auto; padding: 0 16px 120px; }
+
+  /* Header + tabs */
+  header {
+    position: sticky; top: 0; z-index: 20; background: var(--bg);
+    padding: 14px 0 8px; border-bottom: 1px solid var(--border);
+  }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  h1 span { color: var(--accent); }
+  .icon-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; width: 38px; height: 38px; font-size: 17px; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .tabs { display: flex; gap: 6px; margin-top: 12px; }
+  .tab {
+    flex: 1; text-align: center; padding: 9px 0; border-radius: 10px; cursor: pointer;
+    background: transparent; border: 1px solid transparent; color: var(--muted);
+    font-size: 14px; font-weight: 600;
+  }
+  .tab.active { background: var(--panel); border-color: var(--border); color: var(--text); }
+
+  /* Sections */
+  .view { display: none; }
+  .view.active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: var(--gap); }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
+  label.field { display: block; margin-bottom: 14px; }
+  label.field:last-child { margin-bottom: 0; }
+  .lab { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: block; font-weight: 600; }
+
+  input, select {
+    width: 100%; padding: 13px 14px; font-size: 16px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 11px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  /* Segmented controls */
+  .seg { display: flex; gap: 8px; }
+  .seg button {
+    flex: 1; padding: 13px 0; border-radius: 11px; cursor: pointer; font-weight: 700; font-size: 15px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .seg button.on[data-v="CALL"] { background: var(--call-bg); border-color: var(--call); color: var(--call); }
+  .seg button.on[data-v="PUT"] { background: var(--put-bg); border-color: var(--put); color: var(--put); }
+  .seg.action button.on { background: rgba(59,130,246,.15); border-color: var(--accent); color: var(--accent); }
+
+  /* Ticker autocomplete */
+  .ac-wrap { position: relative; }
+  .ac-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 11px;
+    max-height: 260px; overflow-y: auto; box-shadow: 0 12px 30px rgba(0,0,0,.35); display: none;
+  }
+  .ac-list.show { display: block; }
+  .ac-item { padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .ac-item:last-child { border-bottom: 0; }
+  .ac-item:hover, .ac-item.hi { background: var(--panel-2); }
+  .ac-item b { color: var(--accent); }
+  .ac-sym { font-weight: 700; }
+  .ac-name { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ac-empty { padding: 12px 14px; color: var(--muted); font-size: 14px; }
+
+  /* Preview */
+  .preview {
+    background: #0f2419; border: 1px solid #1f5138; border-radius: 12px; padding: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px;
+    white-space: pre-wrap; word-break: break-word; color: #d7f5e3; margin-top: 4px;
+  }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 8px 2px 0; }
+  .hint.warn { color: #eab308; }
+
+  /* Send bar */
+  .sendbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: linear-gradient(to top, var(--bg) 70%, transparent);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .sendbar .inner { max-width: 560px; margin: 0 auto; display: flex; gap: 10px; }
+  .btn {
+    border: none; border-radius: 13px; padding: 15px; font-size: 16px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn.send { flex: 1; background: var(--wa); color: #04321a; }
+  .btn.send:active { transform: scale(.99); }
+  .btn.ghost { background: var(--panel); border: 1px solid var(--border); color: var(--text); flex: 0 0 auto; padding: 15px 18px; }
+  .btn:disabled { opacity: .5; }
+
+  /* History */
+  .hist-item { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+  .hist-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
+  .badge.CALL { background: var(--call-bg); color: var(--call); }
+  .badge.PUT { background: var(--put-bg); color: var(--put); }
+  .hist-body { font-family: ui-monospace, monospace; font-size: 13px; color: var(--text); margin-top: 8px; white-space: pre-wrap; }
+  .hist-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .hist-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .mini { font-size: 12.5px; padding: 7px 12px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); cursor: pointer; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%) translateY(20px);
+    background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: .25s; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .loading { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-row">
+      <h1>📈 Options <span>Signals</span></h1>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme">◐</button>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-view="build">Signal</button>
+      <button class="tab" data-view="history">History</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <!-- BUILD VIEW -->
+  <section class="view active" id="view-build">
+    <div class="card">
+      <h2>Contract</h2>
+      <label class="field">
+        <span class="lab">Direction</span>
+        <div class="seg" id="segDir">
+          <button type="button" data-v="CALL">CALL</button>
+          <button type="button" data-v="PUT">PUT</button>
+        </div>
+      </label>
+
+      <label class="field">
+        <span class="lab">Ticker</span>
+        <div class="ac-wrap">
+          <input id="ticker" type="text" placeholder="Search symbol or company…" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <div class="ac-list" id="acList"></div>
+        </div>
+        <div class="loading" id="tickLoad">Loading US tickers…</div>
+      </label>
+
+      <div class="row2">
+        <label class="field">
+          <span class="lab">Strike price</span>
+          <input id="strike" type="number" inputmode="decimal" placeholder="e.g. 180" step="0.5" min="0" />
+        </label>
+        <label class="field">
+          <span class="lab">Expiry</span>
+          <input id="expiry" type="date" />
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Position call</h2>
+      <label class="field">
+        <span class="lab">Action</span>
+        <div class="seg action" id="segAct">
+          <button type="button" data-v="AVERAGE">Average</button>
+          <button type="button" data-v="HOLD">Hold</button>
+          <button type="button" data-v="SELL">Sell</button>
+        </div>
+      </label>
+      <label class="field">
+        <span class="lab">Note (optional)</span>
+        <input id="note" type="text" placeholder="Latest thoughts on the position…" maxlength="140" />
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Message preview</h2>
+      <div class="preview" id="preview">Fill the fields above…</div>
+      <div class="hint" id="sendHint"></div>
+    </div>
+  </section>
+
+  <!-- HISTORY VIEW -->
+  <section class="view" id="view-history">
+    <div class="card">
+      <h2>Sent signals</h2>
+      <div id="histList"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS VIEW -->
+  <section class="view" id="view-settings">
+    <div class="card">
+      <h2>WhatsApp delivery</h2>
+      <label class="field">
+        <span class="lab">Direct-send contact number (optional)</span>
+        <input id="waNumber" type="tel" inputmode="tel" placeholder="e.g. 14155551234 (country code, no +)" />
+        <div class="hint">WhatsApp has no public link to post into a <b>group</b>. Leave this blank to use the recommended flow: the message is copied and WhatsApp opens so you paste it into your group. Set a number to instead open a direct chat with one contact.</div>
+      </label>
+      <label class="field">
+        <span class="lab">Signal header text</span>
+        <input id="headerText" type="text" placeholder="OPTIONS SIGNAL" maxlength="40" />
+      </label>
+    </div>
+    <div class="card">
+      <h2>Data</h2>
+      <div class="hint">Ticker list: <span id="tickCount">…</span> US symbols (NASDAQ / NYSE / AMEX).</div>
+      <div class="hist-actions">
+        <button class="mini" id="clearHist">Clear history</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="sendbar" id="sendbar">
+  <div class="inner">
+    <button class="btn ghost" id="copyBtn" title="Copy message">⧉</button>
+    <button class="btn send" id="sendBtn">📤 Copy &amp; Send to WhatsApp</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var LS = window.localStorage;
+  var state = {
+    dir: "CALL",
+    action: "HOLD",
+    tickers: [],
+    selectedSym: ""
+  };
+
+  /* ---------- Theme ---------- */
+  var savedTheme = safeGet("theme");
+  if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  $("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    var next = cur === "light" ? "dark" : cur === "dark" ? "light"
+      : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", next);
+    safeSet("theme", next);
+  });
+
+  /* ---------- Tab navigation ---------- */
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (x) { x.classList.remove("active"); });
+      t.classList.add("active");
+      document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+      $("view-" + t.dataset.view).classList.add("active");
+      $("sendbar").style.display = t.dataset.view === "build" ? "block" : "none";
+      if (t.dataset.view === "history") renderHistory();
+      window.scrollTo(0, 0);
+    });
+  });
+
+  /* ---------- Segmented controls ---------- */
+  function wireSeg(seg, key, def) {
+    var btns = seg.querySelectorAll("button");
+    function set(v) {
+      state[key] = v;
+      btns.forEach(function (b) { b.classList.toggle("on", b.dataset.v === v); });
+      updatePreview();
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.v); }); });
+    set(def);
+  }
+  wireSeg($("segDir"), "dir", "CALL");
+  wireSeg($("segAct"), "action", "HOLD");
+
+  /* ---------- Settings persistence ---------- */
+  ["waNumber", "headerText"].forEach(function (id) {
+    var el = $(id);
+    el.value = safeGet(id) || (id === "headerText" ? "OPTIONS SIGNAL" : "");
+    el.addEventListener("input", function () { safeSet(id, el.value.trim()); updatePreview(); });
+  });
+
+  /* ---------- Field inputs ---------- */
+  ["strike", "expiry", "note"].forEach(function (id) {
+    $(id).addEventListener("input", updatePreview);
+  });
+
+  /* ---------- Ticker autocomplete ---------- */
+  var tickInput = $("ticker"), acList = $("acList"), hiIndex = -1, curMatches = [];
+  fetch("data/tickers.json")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      state.tickers = data;
+      $("tickLoad").style.display = "none";
+      $("tickCount").textContent = data.length.toLocaleString();
+    })
+    .catch(function () {
+      $("tickLoad").textContent = "Ticker list unavailable — you can still type any symbol.";
+      $("tickCount").textContent = "unavailable";
+    });
+
+  function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function highlight(text, q) {
+    if (!q) return text;
+    var re = new RegExp("(" + esc(q) + ")", "ig");
+    return text.replace(re, "<b>$1</b>");
+  }
+
+  function search(q) {
+    q = q.trim().toUpperCase();
+    if (!q) return [];
+    var starts = [], contains = [];
+    for (var i = 0; i < state.tickers.length; i++) {
+      var t = state.tickers[i];
+      if (t.s === q) { starts.unshift(t); continue; }
+      if (t.s.indexOf(q) === 0) starts.push(t);
+      else if (t.s.indexOf(q) > 0 || (t.n && t.n.toUpperCase().indexOf(q) >= 0)) contains.push(t);
+      if (starts.length >= 8) break;
+    }
+    return starts.concat(contains).slice(0, 8);
+  }
+
+  function renderAc() {
+    var q = tickInput.value;
+    curMatches = search(q); hiIndex = -1;
+    if (!curMatches.length) {
+      if (q.trim()) {
+        acList.innerHTML = '<div class="ac-empty">No match — “' + q.trim().toUpperCase() + '” will be used as typed.</div>';
+        acList.classList.add("show");
+      } else acList.classList.remove("show");
+      return;
+    }
+    acList.innerHTML = curMatches.map(function (t, i) {
+      return '<div class="ac-item" data-i="' + i + '">' +
+        '<div class="ac-sym">' + highlight(t.s, q) + '</div>' +
+        (t.n ? '<div class="ac-name">' + highlight(t.n, q) + '</div>' : '') +
+      '</div>';
+    }).join("");
+    acList.classList.add("show");
+    acList.querySelectorAll(".ac-item").forEach(function (el) {
+      el.addEventListener("mousedown", function (e) { e.preventDefault(); pick(curMatches[+el.dataset.i]); });
+    });
+  }
+
+  function pick(t) {
+    tickInput.value = t.s;
+    state.selectedSym = t.s;
+    acList.classList.remove("show");
+    updatePreview();
+  }
+
+  tickInput.addEventListener("input", function () {
+    tickInput.value = tickInput.value.toUpperCase();
+    state.selectedSym = tickInput.value.trim();
+    renderAc(); updatePreview();
+  });
+  tickInput.addEventListener("focus", function () { if (tickInput.value) renderAc(); });
+  tickInput.addEventListener("blur", function () { setTimeout(function () { acList.classList.remove("show"); }, 150); });
+  tickInput.addEventListener("keydown", function (e) {
+    if (!acList.classList.contains("show") || !curMatches.length) return;
+    var items = acList.querySelectorAll(".ac-item");
+    if (e.key === "ArrowDown") { e.preventDefault(); hiIndex = Math.min(hiIndex + 1, items.length - 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); hiIndex = Math.max(hiIndex - 1, 0); }
+    else if (e.key === "Enter") { if (hiIndex >= 0) { e.preventDefault(); pick(curMatches[hiIndex]); } return; }
+    else return;
+    items.forEach(function (it, i) { it.classList.toggle("hi", i === hiIndex); });
+  });
+
+  /* ---------- Message building ---------- */
+  function buildMessage() {
+    var sym = (state.selectedSym || "").trim().toUpperCase();
+    var strike = $("strike").value.trim();
+    var expiry = $("expiry").value;
+    var note = $("note").value.trim();
+    var header = ($("headerText").value.trim() || "OPTIONS SIGNAL");
+    var arrow = state.dir === "CALL" ? "🟢" : "🔴";
+    var actEmoji = { AVERAGE: "➕", HOLD: "✋", SELL: "💰" }[state.action] || "";
+
+    var expTxt = expiry ? formatDate(expiry) : "—";
+    var lines = [];
+    lines.push("*" + header + "*");
+    lines.push(arrow + " *" + state.dir + "*  |  $" + (sym || "—"));
+    lines.push("🎯 Strike: " + (strike ? "$" + strike : "—"));
+    lines.push("📅 Expiry: " + expTxt);
+    lines.push("📌 Action: *" + state.action + "* " + actEmoji);
+    if (note) lines.push("📝 " + note);
+    lines.push("");
+    lines.push("_" + timestamp() + "_");
+    return lines.join("\n");
+  }
+
+  function updatePreview() {
+    $("preview").textContent = buildMessage();
+    var ok = valid();
+    $("sendBtn").disabled = !ok;
+    $("copyBtn").disabled = !ok;
+    var num = ($("waNumber").value || "").replace(/[^0-9]/g, "");
+    var hint = $("sendHint");
+    if (!ok) { hint.className = "hint warn"; hint.textContent = "Add a ticker to enable sending."; }
+    else if (num) { hint.className = "hint"; hint.textContent = "Will open a direct WhatsApp chat with +" + num + " (message also copied)."; }
+    else { hint.className = "hint"; hint.textContent = "Message is copied to clipboard, then WhatsApp opens — pick your group and paste."; }
+  }
+
+  function valid() { return !!(state.selectedSym || "").trim(); }
+
+  /* ---------- Send / copy ---------- */
+  function copyText(txt) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(txt).catch(function () { fallbackCopy(txt); });
+    }
+    fallbackCopy(txt); return Promise.resolve();
+  }
+  function fallbackCopy(txt) {
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  $("copyBtn").addEventListener("click", function () {
+    copyText(buildMessage()); toast("Copied ✔");
+  });
+
+  $("sendBtn").addEventListener("click", function () {
+    if (!valid()) return;
+    var msg = buildMessage();
+    copyText(msg);
+    saveHistory(msg);
+    var num = ($("waNumber").value || "").replace(/[^0-9]/g, "");
+    var url = "https://wa.me/" + (num ? num : "") + "?text=" + encodeURIComponent(msg);
+    toast(num ? "Opening chat…" : "Copied — paste into your group");
+    setTimeout(function () { window.open(url, "_blank"); }, 250);
+  });
+
+  /* ---------- History ---------- */
+  function saveHistory(msg) {
+    var h = safeJSON("history", []);
+    h.unshift({
+      dir: state.dir, action: state.action, sym: (state.selectedSym || "").toUpperCase(),
+      strike: $("strike").value.trim(), expiry: $("expiry").value,
+      msg: msg, t: Date.now()
+    });
+    if (h.length > 50) h = h.slice(0, 50);
+    safeSet("history", JSON.stringify(h));
+  }
+  function renderHistory() {
+    var h = safeJSON("history", []);
+    var box = $("histList");
+    if (!h.length) { box.innerHTML = '<div class="empty">No signals sent yet.</div>'; return; }
+    box.innerHTML = h.map(function (item, idx) {
+      return '<div class="hist-item">' +
+        '<div class="hist-top">' +
+          '<span class="badge ' + item.dir + '">' + item.dir + ' · $' + item.sym + '</span>' +
+          '<span class="hist-meta">' + timeAgo(item.t) + '</span>' +
+        '</div>' +
+        '<div class="hist-body">' + escapeHtml(item.msg) + '</div>' +
+        '<div class="hist-actions">' +
+          '<button class="mini" data-copy="' + idx + '">Copy</button>' +
+          '<button class="mini" data-resend="' + idx + '">Re-send</button>' +
+          '<button class="mini" data-reuse="' + idx + '">Reuse fields</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+    box.querySelectorAll("[data-copy]").forEach(function (b) {
+      b.addEventListener("click", function () { copyText(h[+b.dataset.copy].msg); toast("Copied ✔"); });
+    });
+    box.querySelectorAll("[data-resend]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var m = h[+b.dataset.resend].msg; copyText(m);
+        var num = ($("waNumber").value || "").replace(/[^0-9]/g, "");
+        window.open("https://wa.me/" + num + "?text=" + encodeURIComponent(m), "_blank");
+      });
+    });
+    box.querySelectorAll("[data-reuse]").forEach(function (b) {
+      b.addEventListener("click", function () { reuse(h[+b.dataset.reuse]); });
+    });
+  }
+  function reuse(item) {
+    tickInput.value = item.sym; state.selectedSym = item.sym;
+    $("strike").value = item.strike || ""; $("expiry").value = item.expiry || "";
+    document.querySelector('#segDir button[data-v="' + item.dir + '"]').click();
+    document.querySelector('#segAct button[data-v="' + item.action + '"]').click();
+    document.querySelector('.tab[data-view="build"]').click();
+    toast("Loaded into form");
+  }
+  $("clearHist").addEventListener("click", function () {
+    if (confirm("Clear all signal history?")) { safeSet("history", "[]"); renderHistory(); toast("History cleared"); }
+  });
+
+  /* ---------- Helpers ---------- */
+  function formatDate(iso) {
+    var d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  function timestamp() {
+    return new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+  function timeAgo(t) {
+    var s = Math.floor((Date.now() - t) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + "m ago";
+    if (s < 86400) return Math.floor(s / 3600) + "h ago";
+    return Math.floor(s / 86400) + "d ago";
+  }
+  function escapeHtml(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  var toastTimer;
+  function toast(msg) {
+    var el = $("toast"); el.textContent = msg; el.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove("show"); }, 1800);
+  }
+  function safeGet(k) { try { return LS.getItem(k); } catch (e) { return null; } }
+  function safeSet(k, v) { try { LS.setItem(k, v); } catch (e) {} }
+  function safeJSON(k, def) { try { return JSON.parse(LS.getItem(k)) || def; } catch (e) { return def; } }
+
+  /* default expiry: next Friday */
+  (function () {
+    var d = new Date(); var day = d.getDay();
+    var add = (5 - day + 7) % 7 || 7; d.setDate(d.getDate() + add);
+    $("expiry").value = d.toISOString().slice(0, 10);
+  })();
+
+  updatePreview();
+})();
+</script>
+</body>
+</html>
